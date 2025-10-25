@@ -8,4 +8,4 @@ vet: fmt
 	go vet ./...
 
 build: vet
-	go build
+	go build ./cmd/passutils
