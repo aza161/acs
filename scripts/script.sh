@@ -1,3 +1,6 @@
+cd ..
+make
+cd scripts
 for ((i = 0; i < 50000; ++i)); do
 	.././passutils
 	echo
