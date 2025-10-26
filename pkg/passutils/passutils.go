@@ -3,24 +3,28 @@ package passutils
 import (
 	"acs/internal/rand"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/go-passwd/validator"
+	"github.com/sethvargo/go-diceware/diceware"
 	"github.com/sethvargo/go-password/password"
 	passwordvalidator "github.com/wagslane/go-password-validator"
 )
 
-// Ensure that minDigiSymbol <= minPassLen/maxFactor
-// recommeded min value for minPassLen is 16
+// Ensure that minDigiSymbol <= minPasswordLen/maxFactor
+// recommeded min value for minPasswordLen is 16
 const (
-	minDigiSymbol int64 = 3
-	minPassLen    int64 = 16
-	maxPassLen    int64 = 128
-	maxFactor     int64 = 5
+	minDigiSymbol    int64 = 3
+	minPasswordLen   int64 = 16
+	maxPasswordLen   int64 = 128
+	maxFactor        int64 = 5
+	minPassphraseLen int64 = 7
 )
 
 // Generates cryptographically secure random parameters necessary for MustGenerate.
 func getPassGenParameters() (int, int, int) {
-	passLen := rand.GetRand(minPassLen, maxPassLen)
+	passLen := rand.GetRand(minPasswordLen, maxPasswordLen)
 
 	// Determines the symbols+digits to alphabets ratio
 	ratioFactor := rand.GetRand(2, maxFactor)
@@ -71,8 +75,8 @@ func GeneratePassword(customSymbols string, noUpper bool) string {
 func CheckPasswordStrength(pass string, userInfo []string, symbols *string, minNumSymbols int) error {
 	sim := 0.3
 	passwordValidator := validator.New(
-		validator.MinLength(int(minPassLen), nil),
-		validator.MaxLength(int(maxPassLen), nil),
+		validator.MinLength(int(minPasswordLen), nil),
+		validator.MaxLength(int(maxPasswordLen), nil),
 		validator.CommonPassword(nil),
 		validator.ContainsAtLeast(*symbols+password.Digits, int(minDigiSymbol), nil),
 		validator.ContainsAtLeast(*symbols, minNumSymbols, nil),
@@ -86,4 +90,16 @@ func CheckPasswordStrength(pass string, userInfo []string, symbols *string, minN
 		}
 	}
 	return err
+}
+
+// This function generates easy to remember passphrases for better user experience.
+// It depends on the diceware library which contains around 7776 words in its dictionary.
+// Each word has around 13 bits of entropy. Therefore to achieve at least 80 bits of
+// entropy we need at least 7 words.
+func GeneratePassphrase(length int) (string, error) {
+	if length < int(minPassphraseLen) {
+		return "", fmt.Errorf("passphrase length must be %d at least", minPassphraseLen)
+	}
+	passph := strings.Join(diceware.MustGenerate(length), "-")
+	return passph, nil
 }
