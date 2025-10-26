@@ -13,4 +13,6 @@ func main() {
 	symbols := password.Symbols
 	//fmt.Println(pass)
 	fmt.Println(passutils.CheckPasswordStrength(pass, nil, &symbols, 1))
+	passph, _ := passutils.GeneratePassphrase(7)
+	fmt.Println(passph)
 }
