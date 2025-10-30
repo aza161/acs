@@ -2,6 +2,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/go-passwd/validator v0.0.0-20250407044832-c284a2f4d990 h1:L+nmVwnj6y8FIf7EvdHuVVoLonhxwOEcQBAn4F6NR3M=
 github.com/go-passwd/validator v0.0.0-20250407044832-c284a2f4d990/go.mod h1:2ePnSHn83EjJwLWR/jmoVJeDuzpearNtaUU0zvxe1cI=
+github.com/golang-jwt/jwt/v5 v5.3.0 h1:pv4AsKCKKZuqlgs5sUmn4x8UlGa0kEVt/puTpKx9vvo=
+github.com/golang-jwt/jwt/v5 v5.3.0/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/sethvargo/go-diceware v0.5.0 h1:exrQ7GpaBo00GqRVM1N8ChXSsi3oS7tjQiIehsD+yR0=
 github.com/sethvargo/go-diceware v0.5.0/go.mod h1:Lg1SyPS7yQO6BBgTN5r4f2MUDkqGfLWsOjHPY0kA8iw=
