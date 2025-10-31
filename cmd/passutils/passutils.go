@@ -1,18 +1,28 @@
 package main
 
 import (
+	"acs/internal/jsonutils"
 	"acs/pkg/passutils"
 	"fmt"
-
-	"github.com/sethvargo/go-password/password"
+	"time"
 )
 
 // Just used to check if everything is functioning as it was intended to be.
 func main() {
-	pass := passutils.GeneratePassword(password.Symbols, false)
-	symbols := password.Symbols
-	//fmt.Println(pass)
-	fmt.Println(passutils.CheckPasswordStrength(pass, nil, &symbols, 1))
 	passph, _ := passutils.GeneratePassphrase(7)
 	fmt.Println(passph)
+
+	List := []jsonutils.Entry{
+		{URL: "google.com", UserName: "ahmad", Password: "test123", CreateDate: time.Now(), AccessDate: time.Now(), Info: ""},
+		{URL: "github.com", UserName: "aza161", Password: "realestOne23", CreateDate: time.Now(), AccessDate: time.Now(), Info: ""},
+		{URL: "linkedin.com", UserName: "him", Password: "idknidcnidts", CreateDate: time.Now(), AccessDate: time.Now(), Info: ""},
+	}
+
+	List = append(List, jsonutils.Entry{URL: "example.com", UserName: "evil", Password: "evesdropperwillhear", CreateDate: time.Now(), AccessDate: time.Now(), Info: ""})
+	passwords, err := jsonutils.EncryptPasswords(passph, List)
+	str, _ := jsonutils.GenerateJson(passwords)
+	fmt.Println(string(str), err)
+	password, err := jsonutils.DecryptPasswords(passph, passwords)
+	str, _ = jsonutils.GenerateJson(password)
+	fmt.Println(string(str))
 }
