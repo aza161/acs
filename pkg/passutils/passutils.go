@@ -10,6 +10,7 @@ import (
 	"github.com/sethvargo/go-diceware/diceware"
 	"github.com/sethvargo/go-password/password"
 	passwordvalidator "github.com/wagslane/go-password-validator"
+	"golang.org/x/crypto/argon2"
 )
 
 // Ensure that minDigiSymbol <= minPasswordLen/maxFactor
@@ -20,6 +21,20 @@ const (
 	maxPasswordLen   int64 = 128
 	maxFactor        int64 = 5
 	minPassphraseLen int64 = 7
+)
+
+const (
+	Time    uint32 = 1
+	Memory  uint32 = 64 * 1024
+	Threads uint8  = 8
+	SaltLen uint32 = 16 // in bytes
+	KeyLen  uint32 = 32 // in bytes
+)
+
+var (
+	ShortSalt  error = errors.New("slat should be 16 bytes at least")
+	NoPassword error = errors.New("passowrd empty")
+	NoThreads  error = errors.New("threads should be >=1 ")
 )
 
 // Generates cryptographically secure random parameters necessary for MustGenerate.
@@ -102,4 +117,21 @@ func GeneratePassphrase(length int) (string, error) {
 	}
 	passph := strings.Join(diceware.MustGenerate(length), "-")
 	return passph, nil
+}
+
+func Argon2ID(pass string, salt []byte, threads uint8) ([]byte, error) {
+	if len(pass) == 0 {
+		return nil, NoPassword
+	}
+
+	if threads == 0 {
+		return nil, NoThreads
+	}
+
+	if len(salt) != int(SaltLen) {
+		return nil, ShortSalt
+	}
+
+	key := argon2.IDKey([]byte(pass), salt, Time, Memory, threads, KeyLen)
+	return key, nil
 }
