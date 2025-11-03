@@ -11,12 +11,13 @@ import (
 )
 
 type EncryptedPasswords struct {
-	Salt          string `json:"salt"`
-	Time          uint32 `json:"time"`
-	Memory        uint32 `json:"memory"`
-	Threads       uint8  `json:"threads"`
-	Nonce         string `json:"gcm_nonce"`
-	EncryptedData string `json:"blob"`
+	Salt          string    `json:"salt"`
+	Time          uint32    `json:"time"`
+	Memory        uint32    `json:"memory"`
+	Threads       uint8     `json:"threads"`
+	Nonce         string    `json:"gcm_nonce"`
+	UpdateDate    time.Time `json:"update_date"`
+	EncryptedData string    `json:"blob"`
 }
 
 // A passowrd entry model, exclusively used on client side
@@ -25,6 +26,7 @@ type Entry struct {
 	UserName   string    `json:"username"`
 	Password   string    `json:"password"`
 	CreateDate time.Time `json:"create_date"`
+	UpdateDate time.Time `json:"update_date"`
 	AccessDate time.Time `json:"access_date"`
 	Info       string    `json:"notes,omitempty"`
 }
