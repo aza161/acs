@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"runtime"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type EncryptedPasswords struct {
@@ -29,6 +31,24 @@ type Entry struct {
 	UpdateDate time.Time `json:"update_date"`
 	AccessDate time.Time `json:"access_date"`
 	Info       string    `json:"notes,omitempty"`
+}
+
+type RegisterRequest struct {
+	UserName       string    `json:"user_name" binding:"required"`
+	Password       string    `json:"password" binding:"required"`
+	UniqueDeviceID uuid.UUID `json:"uuid" binding:"required"`
+}
+
+type LoginRequest struct {
+	UserName string `json:"user_name" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type SyncRequest struct {
+	JWT            string    `json:"token" binding:"required"`
+	UniqueDeviceID uuid.UUID `json:"uuid" binding:"required"`
+	UpdateDate     time.Time `json:"update_date" binding:"required"`
+	IsMerged       bool      `json:"is_merged" binding:"required"`
 }
 
 // A function that generates indented JSON stings
