@@ -7,10 +7,12 @@ import (
 	"acs/pkg/passutils"
 	"bytes"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +20,9 @@ const (
 	jwtPrivateKey = ".keys/jwt/privateKey.pem" // used for JWT
 	jwtPublicKey  = ".keys/jwt/publicKey.pem"
 	privteKey     = ".keys/privateKey.pem" // used for TLS
-	publicKey     = ".keys/publicKey.pem"
+	publicKey     = ".keys/certificate.crt"
+	dbPath        = ".db/db.sqlite"
+	port          = 443 // you can change this for testing purposes.
 )
 
 var (
@@ -26,11 +30,55 @@ var (
 )
 
 type Server struct {
-	db            *gorm.DB
-	JwtPrivateKey string
-	JwtPublicKey  string
-	PrivateKey    string
-	PublicKey     string
+	db                *gorm.DB
+	JwtPrivateKey     string
+	JwtPublicKey      string
+	PublicCertificate string
+	PublicKey         string
+}
+
+func (s *Server) setUpServerAndRouter(dbPath string, jwtPrivateKey, jwtPublicKey, privateKey, publicKey string) *gin.Engine {
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	if err != nil {
+		return nil
+	}
+	s.db = db
+	s.JwtPrivateKey = jwtPrivateKey
+	s.JwtPublicKey = jwtPublicKey
+	s.PublicCertificate = privateKey
+	s.PublicKey = publicKey
+	router := gin.Default()
+	router.POST("/register", s.registerAccount)
+	router.POST("/login", s.userLogin)
+	router.POST("/sync", s.syncData)
+	return router
+}
+
+func main() {
+	fmt.Println("Welcome to acs server...")
+	fmt.Println("Make sure to install SQLite3 on your system")
+	fmt.Println("Make sure to run serversetup.sh script in the same directory of the server binary before continuing")
+	var ans string
+	for {
+		fmt.Println("Continue? [y]es [n]o")
+		fmt.Scanf("%s", &ans)
+		if ans == "y" || ans == "Y" {
+			break
+		} else if ans == "n" || ans == "N" {
+			os.Exit(1)
+		} else {
+			fmt.Println("Invalid input. Please enter 'y' or 'n'.")
+		}
+	}
+
+	var s Server
+	router := s.setUpServerAndRouter(dbPath, jwtPrivateKey, jwtPublicKey, privteKey, publicKey)
+	fmt.Printf("Server started listening on port %d\n", port)
+	strPort := fmt.Sprintf(":%d", port)
+	err := router.RunTLS(strPort, s.PublicKey, s.PublicCertificate)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (s *Server) registerAccount(c *gin.Context) {
@@ -123,7 +171,13 @@ func (s *Server) syncData(c *gin.Context) {
 	}
 
 	if !user.UpdatedAt.UTC().Equal(json.UpdateDate.UTC()) && !json.IsMerged {
-		c.IndentedJSON(409, user)
+		str, err := getEncryptedData(user)
+		if err != nil {
+			log.Printf("Internal server error: %v", err)
+			c.IndentedJSON(500, gin.H{"error": "something went wrong please try again"})
+			return
+		}
+		c.Data(409, "application/json", []byte(str))
 		return
 	}
 
