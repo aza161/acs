@@ -45,7 +45,7 @@ func CreateUser(db *gorm.DB, userName, password string, editorUUID uuid.UUID) er
 	if err != nil {
 		return err
 	}
-	uri := slug.Make(userName) + "-" + slug.Make(genSlug.MustGenerate(8, 0, 0, false, true))
+	uri := slug.Make(genSlug.MustGenerate(16, 0, 0, false, true))
 	user := User{UserName: userName, PasswordHash: passwordHash, Salt: salt, Threads: passutils.Threads, URI: uri, EditedBy: editorUUID}
 	result := db.Create(&user)
 	if result.Error != nil {
