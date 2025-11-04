@@ -111,7 +111,7 @@ func (s *Server) syncData(c *gin.Context) {
 		return
 	}
 
-	if user.UpdatedAt.Compare(json.UpdateDate) == -1 && !json.IsMerged && user.EditedBy == json.UniqueDeviceID {
+	if user.UpdatedAt.UTC().Compare(json.UpdateDate.UTC()) == -1 && !json.IsMerged && user.EditedBy == json.UniqueDeviceID {
 		err := overWriteFile(user, json.EncryptedData)
 		if err != nil {
 			log.Printf("Internal server error: %v", err)
@@ -122,12 +122,12 @@ func (s *Server) syncData(c *gin.Context) {
 		return
 	}
 
-	if !user.UpdatedAt.Equal(json.UpdateDate) && !json.IsMerged {
+	if !user.UpdatedAt.UTC().Equal(json.UpdateDate.UTC()) && !json.IsMerged {
 		c.IndentedJSON(409, user)
 		return
 	}
 
-	if user.UpdatedAt.Equal(json.UpdateDate) && !json.IsMerged {
+	if user.UpdatedAt.UTC().Equal(json.UpdateDate.UTC()) && !json.IsMerged {
 		c.JSON(200, gin.H{"status": "ok"})
 		return
 	}
