@@ -31,6 +31,7 @@ type Entry struct {
 	UpdateDate time.Time `json:"update_date"`
 	AccessDate time.Time `json:"access_date"`
 	Info       string    `json:"notes,omitempty"`
+	IsDeleted  bool      `json:"is_deleted"`
 }
 
 type RegisterRequest struct {
@@ -55,6 +56,12 @@ type SyncRequest struct {
 // A function that generates indented JSON stings
 func GenerateJson(object any) ([]byte, error) {
 	return json.MarshalIndent(object, "", "  ")
+}
+
+// Helper function to create a unique key for an entry
+func (e Entry) Key() string {
+	// Assuming URL + UserName uniquely identifies an entry
+	return e.URL + ":" + e.UserName
 }
 
 // A function that takes a password, generates an encryption key using Argon2ID,
