@@ -17,10 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ------------------------------------------------------------
-// CONFIG + FILE PATHS
-// ------------------------------------------------------------
-
 type AppConfig struct {
 	ClientID  string `json:"client_id"`
 	VaultPath string `json:"vault_path"`
@@ -31,10 +27,6 @@ const (
 	configFileName = "config.json"
 	vaultFileName  = "vault.json"
 )
-
-// ------------------------------------------------------------
-// ENTRYPOINT
-// ------------------------------------------------------------
 
 func main() {
 	if err := run(); err != nil {
@@ -63,37 +55,37 @@ func run() error {
 	vaultPath := cfg.VaultPath
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println("=== ACS Secure Password Manager ===")
-	fmt.Println("Config loaded for client:", cfg.ClientID)
-	fmt.Println()
-
 	var entries []jsonutils.Entry
 	var master string
 
+	// unlock or create vault
 	if fileExists(vaultPath) {
 		for {
+			clearScreen()
+			showBanner()
 			master = promptHidden("Enter master password: ")
 
 			encVault, err := readEncryptedVault(vaultPath)
 			if err != nil {
-				// don’t reveal decryption errors
-				fmt.Println("An error occurred while opening the vault")
+				fmt.Println("An error occurred while opening the vault.")
 				continue
 			}
 
 			entries, err = jsonutils.DecryptPasswords(master, encVault)
 			if err != nil {
-				// don’t reveal decryption errors
-				fmt.Println("An error occurred while opening the vault")
+				fmt.Println("An error occurred while opening the vault.")
 				continue
 			}
 
+			fmt.Printf("\x1b[32mVault unlocked. %d entries loaded.\x1b[0m\n", len(entries))
+			time.Sleep(2 * time.Second)
 			break
 		}
-		fmt.Printf("Vault unlocked. %d entries loaded.\n\n", len(entries))
 	} else {
-		// new vault → create master
+		clearScreen()
+		showBanner()
 		fmt.Println("No vault found. Let's create one.")
+
 		for {
 			master = promptHidden("Create master password: ")
 			confirm := promptHidden("Confirm master password: ")
@@ -102,7 +94,6 @@ func run() error {
 				continue
 			}
 
-			// ✅ FIX: pass a non-nil symbols pointer and 0 min symbols
 			emptySymbols := ""
 			if err := passutils.CheckPasswordStrength(master, nil, &emptySymbols, 0); err != nil {
 				fmt.Println("Password not strong enough:", err)
@@ -117,17 +108,23 @@ func run() error {
 		if err := writeEncryptedVault(vaultPath, master, entries); err != nil {
 			return err
 		}
-		fmt.Println("Vault created.\n")
+		fmt.Println("\x1b[32mVault created successfully.\x1b[0m")
+		time.Sleep(2 * time.Second)
 	}
 
-	// main menu
+	// main loop
 	for {
-		fmt.Println("Choose an option:")
-		fmt.Println("1) Add password")
-		fmt.Println("2) List entries (URLs)")
-		fmt.Println("3) View entry details")
-		fmt.Println("4) Generate password (customizable)")
-		fmt.Println("5) Save & Exit")
+		clearScreen()
+		showBanner()
+		fmt.Printf("Client ID: %s\n", cfg.ClientID)
+		fmt.Printf("Entries in vault: %d\n\n", len(entries))
+
+		menuSpeed := 8 * time.Millisecond
+		typeLine("\x1b[33m1)\x1b[0m Add password", menuSpeed)
+		typeLine("\x1b[33m2)\x1b[0m List entries (URLs)", menuSpeed)
+		typeLine("\x1b[33m3)\x1b[0m View entry details", menuSpeed)
+		typeLine("\x1b[33m4)\x1b[0m Generate password (customizable)", menuSpeed)
+		typeLine("\x1b[33m5)\x1b[0m Save & Exit", menuSpeed)
 		fmt.Print("> ")
 
 		choice, _ := reader.ReadString('\n')
@@ -137,39 +134,72 @@ func run() error {
 		case "1":
 			newEntry, err := addPasswordFlow(entries)
 			if err != nil {
-				fmt.Println("error adding password:", err)
+				fmt.Println("Error adding password:", err)
+				fmt.Println("Press Enter to continue...")
+				reader.ReadString('\n')
 				continue
 			}
 			entries = append(entries, newEntry)
 			if err := writeEncryptedVault(vaultPath, master, entries); err != nil {
-				fmt.Println("error saving vault:", err)
+				fmt.Println("Error saving vault:", err)
 			} else {
-				fmt.Println("Entry added and saved.")
+				fmt.Println("\x1b[32mEntry added and saved.\x1b[0m")
 			}
+			fmt.Println("Press Enter to continue...")
+			reader.ReadString('\n')
+
 		case "2":
 			listEntries(entries)
+			fmt.Println("Press Enter to continue...")
+			reader.ReadString('\n')
+
 		case "3":
 			viewEntryDetails(entries)
+			fmt.Println("Press Enter to continue...")
+			reader.ReadString('\n')
+
 		case "4":
 			gen := passwordGenerationFlow()
-			fmt.Println("Generated password:", gen)
-			fmt.Println("You can use this when adding a new password (option 1).")
+			fmt.Println("Generated:", gen)
+			fmt.Println("Press Enter to continue...")
+			reader.ReadString('\n')
+
 		case "5":
 			if err := writeEncryptedVault(vaultPath, master, entries); err != nil {
-				fmt.Println("error saving vault:", err)
+				fmt.Println("Error saving vault:", err)
 			}
 			fmt.Println("Goodbye 👋")
 			return nil
+
 		default:
-			fmt.Println("invalid choice")
+			fmt.Println("Invalid choice.")
+			fmt.Println("Press Enter to continue...")
+			reader.ReadString('\n')
 		}
-		fmt.Println()
 	}
 }
 
-// ------------------------------------------------------------
-// CONFIG HANDLING
-// ------------------------------------------------------------
+// -------------------------- UI --------------------------
+
+func clearScreen() {
+	fmt.Print("\033[2J\033[H")
+}
+
+func typeLine(s string, delay time.Duration) {
+	for _, ch := range s {
+		fmt.Printf("%c", ch)
+		time.Sleep(delay)
+	}
+	fmt.Println()
+}
+
+func showBanner() {
+	fmt.Println("\x1b[36m==============================\x1b[0m")
+	fmt.Println("\x1b[36m     ACS Password Manager     \x1b[0m")
+	fmt.Println("\x1b[36m==============================\x1b[0m")
+}
+
+// -------------------------- config --------------------------
 
 func loadOrCreateConfig(configPath, baseDir string) (AppConfig, error) {
 	if fileExists(configPath) {
@@ -214,9 +244,7 @@ func saveConfig(path string, cfg AppConfig) error {
 	return enc.Encode(cfg)
 }
 
-// ------------------------------------------------------------
-// VAULT HANDLING
-// ------------------------------------------------------------
+// -------------------------- vault --------------------------
 
 func readEncryptedVault(path string) (jsonutils.EncryptedPasswords, error) {
 	data, err := os.ReadFile(path)
@@ -247,9 +275,7 @@ func writeEncryptedVault(path, master string, entries []jsonutils.Entry) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-// ------------------------------------------------------------
-// FLOWS
-// ------------------------------------------------------------
+// -------------------------- flows --------------------------
 
 func addPasswordFlow(existing []jsonutils.Entry) (jsonutils.Entry, error) {
 	reader := bufio.NewReader(os.Stdin)
@@ -273,14 +299,10 @@ func addPasswordFlow(existing []jsonutils.Entry) (jsonutils.Entry, error) {
 	} else {
 		for {
 			pass := promptHidden("Enter password for this entry: ")
-
-			// ✅ FIX: pass non-nil symbols and 0 min symbols
 			emptySymbols := ""
-			// we can use username as userInfo to prevent too-similar passwords
 			uInfo := []string{username}
 			if err := passutils.CheckPasswordStrength(pass, uInfo, &emptySymbols, 0); err != nil {
 				fmt.Println("Password weak:", err)
-				fmt.Println("Try again or Ctrl+C to abort.")
 				continue
 			}
 			password = pass
@@ -334,7 +356,7 @@ func viewEntryDetails(entries []jsonutils.Entry) {
 	fmt.Sscanf(idxStr, "%d", &idx)
 	idx = idx - 1
 	if idx < 0 || idx >= len(entries) {
-		fmt.Println("invalid index")
+		fmt.Println("Invalid index.")
 		return
 	}
 
@@ -354,22 +376,146 @@ func viewEntryDetails(entries []jsonutils.Entry) {
 func passwordGenerationFlow() string {
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Print("Exclude uppercase letters? (y/n): ")
-	noUpStr, _ := reader.ReadString('\n')
-	noUpStr = strings.TrimSpace(strings.ToLower(noUpStr))
-	noUpper := noUpStr == "y"
+	fmt.Print("Generate passphrase instead of random password? (y/n): ")
+	mode, _ := reader.ReadString('\n')
+	mode = strings.TrimSpace(strings.ToLower(mode))
+
+	if mode == "y" {
+		opts := passutils.PassphraseOptions{}
+
+		fmt.Print("How many words? (enter for 7): ")
+		wstr, _ := reader.ReadString('\n')
+		wstr = strings.TrimSpace(wstr)
+		if wstr == "" {
+			opts.Length = 7
+		} else {
+			var l int
+			fmt.Sscanf(wstr, "%d", &l)
+			opts.Length = l
+		}
+
+		fmt.Print("Separator (enter for '-'): ")
+		sep, _ := reader.ReadString('\n')
+		sep = strings.TrimSpace(sep)
+		if sep != "" {
+			opts.Separator = sep
+		}
+
+		fmt.Print("Casing? (none/title/random) [enter for none]: ")
+		cs, _ := reader.ReadString('\n')
+		cs = strings.TrimSpace(strings.ToLower(cs))
+		if cs != "" {
+			opts.CaseStyle = cs
+		}
+
+		fmt.Print("Add a digit? (y/n): ")
+		ad, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(ad)) == "y" {
+			opts.AddNumber = true
+			fmt.Print("Digit position? (prefix/suffix/between, enter for suffix): ")
+			dp, _ := reader.ReadString('\n')
+			dp = strings.TrimSpace(strings.ToLower(dp))
+			if dp != "" {
+				opts.NumberPosition = dp
+			}
+		}
+
+		fmt.Print("Add a symbol? (y/n): ")
+		as, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(as)) == "y" {
+			opts.AddSymbol = true
+			fmt.Print("Symbol set (enter for !@#$%^&*): ")
+			ss, _ := reader.ReadString('\n')
+			ss = strings.TrimSpace(ss)
+			if ss != "" {
+				opts.SymbolSet = ss
+			}
+			fmt.Print("Symbol position? (prefix/suffix/between, enter for suffix): ")
+			sp, _ := reader.ReadString('\n')
+			sp = strings.TrimSpace(strings.ToLower(sp))
+			if sp != "" {
+				opts.SymbolPosition = sp
+			}
+		}
+
+		pp, err := passutils.GeneratePassphraseAdvanced(opts)
+		if err != nil {
+			fmt.Println("error generating passphrase:", err)
+			return ""
+		}
+		return pp
+	}
+
+	const defaultLen = 16
+	const defaultDigits = 3
+	const defaultSymbols = 1
+
+	popts := passutils.PasswordOptions{}
+
+	fmt.Printf("Password length (enter for %d): ", defaultLen)
+	lenStr, _ := reader.ReadString('\n')
+	lenStr = strings.TrimSpace(lenStr)
+	if lenStr != "" {
+		var l int
+		fmt.Sscanf(lenStr, "%d", &l)
+		popts.Length = l
+	} else {
+		popts.Length = defaultLen
+	}
+
+	fmt.Printf("Min digits (enter for %d): ", defaultDigits)
+	dStr, _ := reader.ReadString('\n')
+	dStr = strings.TrimSpace(dStr)
+	if dStr != "" {
+		var d int
+		fmt.Sscanf(dStr, "%d", &d)
+		popts.MinDigits = d
+	} else {
+		popts.MinDigits = defaultDigits
+	}
+
+	fmt.Printf("Min symbols (enter for %d): ", defaultSymbols)
+	sStr, _ := reader.ReadString('\n')
+	sStr = strings.TrimSpace(sStr)
+	if sStr != "" {
+		var s int
+		fmt.Sscanf(sStr, "%d", &s)
+		popts.MinSymbols = s
+	} else {
+		popts.MinSymbols = defaultSymbols
+	}
+
+	fmt.Print("Allow uppercase? (y/n, enter for yes): ")
+	au, _ := reader.ReadString('\n')
+	au = strings.TrimSpace(strings.ToLower(au))
+	popts.AllowUpper = (au != "n")
+
+	fmt.Print("Allow lowercase? (y/n, enter for yes): ")
+	al, _ := reader.ReadString('\n')
+	al = strings.TrimSpace(strings.ToLower(al))
+	popts.AllowLower = (al != "n")
+
+	fmt.Print("Allow character repetition? (y/n, enter for yes): ")
+	ar, _ := reader.ReadString('\n')
+	ar = strings.TrimSpace(strings.ToLower(ar))
+	popts.AllowRepeat = (ar != "n")
 
 	fmt.Print("Custom symbols (leave empty for default): ")
-	custSym, _ := reader.ReadString('\n')
-	custSym = strings.TrimSpace(custSym)
+	cs, _ := reader.ReadString('\n')
+	cs = strings.TrimSpace(cs)
+	if cs != "" {
+		popts.CustomSymbols = cs
+	}
 
-	pass := passutils.GeneratePassword(custSym, noUpper)
-	return pass
+	pwd, err := passutils.GeneratePasswordAdvanced(popts)
+	if err != nil {
+		fmt.Println("error generating password:", err)
+		return ""
+	}
+	return pwd
 }
 
-// ------------------------------------------------------------
-// HELPERS
-// ------------------------------------------------------------
+// -------------------------- misc --------------------------
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)

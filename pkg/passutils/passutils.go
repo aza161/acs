@@ -13,8 +13,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Ensure that minDigiSymbol <= minPasswordLen/maxFactor
-// recommeded min value for minPasswordLen is 16
+// password length / digits / symbols defaults
 const (
 	minDigiSymbol    int64 = 3
 	minPasswordLen   int64 = 16
@@ -32,12 +31,12 @@ const (
 )
 
 var (
-	ShortSalt  error = errors.New("slat should be 16 bytes at least")
-	NoPassword error = errors.New("passowrd empty")
+	ShortSalt  error = errors.New("salt should be 16 bytes at least")
+	NoPassword error = errors.New("password empty")
 	NoThreads  error = errors.New("threads should be >=1 ")
 )
 
-// Generates cryptographically secure random parameters necessary for MustGenerate.
+// random params for password generation
 func getPassGenParameters() (int, int, int) {
 	passLen := rand.GetRand(minPasswordLen, maxPasswordLen)
 
@@ -67,7 +66,7 @@ func getPassGenParameters() (int, int, int) {
 	return passLen, int(totalDigi), int(totalSymbol)
 }
 
-// Generates a custom password generator to be used if the user wants to use custom symbols.
+// custom generator with user symbols
 func getGenerator(symbols string) *password.Generator {
 	gen, err := password.NewGenerator(&password.GeneratorInput{
 		Symbols: symbols,
@@ -78,15 +77,14 @@ func getGenerator(symbols string) *password.Generator {
 	return gen
 }
 
-// Generates a cryptographically secure random password.
+// GeneratePassword returns a crypto-strong password.
 func GeneratePassword(customSymbols string, noUpper bool) string {
 	gen := getGenerator(customSymbols)
 	passLen, digits, symbols := getPassGenParameters()
 	return gen.MustGenerate(passLen, digits, symbols, noUpper, true)
 }
 
-// Validates the security of a password and measures its entropy.
-// A user can pass a set of custom symbols to check if the password contains minNumSymbols of them.
+// CheckPasswordStrength validates password strength.
 func CheckPasswordStrength(pass string, userInfo []string, symbols *string, minNumSymbols int) error {
 	sim := 0.3
 	passwordValidator := validator.New(
@@ -107,10 +105,7 @@ func CheckPasswordStrength(pass string, userInfo []string, symbols *string, minN
 	return err
 }
 
-// This function generates easy to remember passphrases for better user experience.
-// It depends on the diceware library which contains around 7776 words in its dictionary.
-// Each word has around 13 bits of entropy. Therefore to achieve at least 80 bits of
-// entropy we need at least 7 words.
+// GeneratePassphrase returns a diceware passphrase (>=7 words).
 func GeneratePassphrase(length int) (string, error) {
 	if length < int(minPassphraseLen) {
 		return "", fmt.Errorf("passphrase length must be %d at least", minPassphraseLen)
@@ -134,4 +129,154 @@ func Argon2ID(pass string, salt []byte, threads uint8) ([]byte, error) {
 
 	key := argon2.IDKey([]byte(pass), salt, Time, Memory, threads, KeyLen)
 	return key, nil
+}
+
+// PassphraseOptions defines how to customize a diceware-style passphrase.
+type PassphraseOptions struct {
+	Length           int    // number of words
+	Separator        string // e.g. "-", "_", " ", ""
+	RandomSeparator  bool   // if true, pick random separators from SeparatorSet
+	SeparatorSet     string // e.g. "-_." used only if RandomSeparator=true
+	AddNumber        bool   // add a digit somewhere
+	AddSymbol        bool   // add a symbol somewhere
+	NumberPosition   string // "prefix", "suffix", "between"
+	SymbolPosition   string // "prefix", "suffix", "between"
+	SymbolSet        string // custom symbol set, default: "!@#$%^&*"
+	CaseStyle        string // "none", "title", "random"
+	MinWordsRequired int    // safety lower bound, e.g. 7
+}
+
+func GeneratePassphraseAdvanced(opts PassphraseOptions) (string, error) {
+	if opts.Length == 0 {
+		opts.Length = int(minPassphraseLen)
+	}
+	if opts.MinWordsRequired == 0 {
+		opts.MinWordsRequired = int(minPassphraseLen)
+	}
+	if opts.Length < opts.MinWordsRequired {
+		return "", fmt.Errorf("passphrase length must be %d at least", opts.MinWordsRequired)
+	}
+	if opts.Separator == "" {
+		opts.Separator = "-"
+	}
+	if opts.SymbolSet == "" {
+		opts.SymbolSet = "!@#$%^&*"
+	}
+	if opts.SeparatorSet == "" {
+		opts.SeparatorSet = "-_." // tiny default pool
+	}
+	if opts.CaseStyle == "" {
+		opts.CaseStyle = "none"
+	}
+
+	words := diceware.MustGenerate(opts.Length)
+
+	for i := range words {
+		switch opts.CaseStyle {
+		case "title":
+			words[i] = strings.Title(words[i])
+		case "random":
+			if rand.GetRand(0, 1) == 1 {
+				words[i] = strings.Title(words[i])
+			}
+		default:
+		}
+	}
+
+	var passph string
+	if opts.RandomSeparator {
+		var b strings.Builder
+		for i, w := range words {
+			b.WriteString(w)
+			if i < len(words)-1 {
+				idx := rand.GetRand(0, int64(len(opts.SeparatorSet))-1)
+				sep := opts.SeparatorSet[idx : idx+1]
+				b.WriteString(sep)
+			}
+		}
+		passph = b.String()
+	} else {
+		passph = strings.Join(words, opts.Separator)
+	}
+
+	// helper to insert in-between words (i.e. inside the string)
+	insertBetween := func(base, insert string) string {
+		pos := rand.GetRand(0, int64(len(base)))
+		return base[:pos] + insert + base[pos:]
+	}
+
+	if opts.AddNumber {
+		d := fmt.Sprintf("%d", rand.GetRand(0, 9))
+		switch opts.NumberPosition {
+		case "prefix":
+			passph = d + passph
+		case "between":
+			passph = insertBetween(passph, d)
+		default:
+			passph = passph + d
+		}
+	}
+
+	if opts.AddSymbol && len(opts.SymbolSet) > 0 {
+		idx := rand.GetRand(0, int64(len(opts.SymbolSet))-1)
+		sym := string(opts.SymbolSet[idx])
+		switch opts.SymbolPosition {
+		case "prefix":
+			passph = sym + passph
+		case "between":
+			passph = insertBetween(passph, sym)
+		default:
+			passph = passph + sym
+		}
+	}
+
+	return passph, nil
+}
+
+// PasswordOptions controls advanced password generation.
+type PasswordOptions struct {
+	Length        int    // total length
+	MinDigits     int    // at least this many digits
+	MinSymbols    int    // at least this many symbols
+	AllowUpper    bool   // include uppercase letters
+	AllowLower    bool   // include lowercase letters
+	AllowRepeat   bool   // allow character repetition
+	CustomSymbols string // optional symbol set
+}
+
+// GeneratePasswordAdvanced creates a policy-friendly password.
+func GeneratePasswordAdvanced(opts PasswordOptions) (string, error) {
+	if opts.Length == 0 {
+		opts.Length = int(minPasswordLen)
+	}
+	if opts.Length < int(minPasswordLen) {
+		opts.Length = int(minPasswordLen)
+	}
+	if opts.Length > int(maxPasswordLen) {
+		opts.Length = int(maxPasswordLen)
+	}
+	if opts.AllowLower == false && opts.AllowUpper == false {
+		opts.AllowLower = true
+	}
+
+	genInput := &password.GeneratorInput{}
+	if opts.CustomSymbols != "" {
+		genInput.Symbols = opts.CustomSymbols
+	}
+	gen, err := password.NewGenerator(genInput)
+	if err != nil {
+		return "", err
+	}
+
+	noUpper := !opts.AllowUpper
+
+	res := gen.MustGenerate(
+		opts.Length,
+		opts.MinDigits,
+		opts.MinSymbols,
+		noUpper,
+		opts.AllowRepeat,
+	)
+
+	return res, nil
 }
