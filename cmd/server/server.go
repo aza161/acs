@@ -1,6 +1,7 @@
 package main
 
 import (
+	"acs/internal/db"
 	acsDB "acs/internal/db"
 	"acs/internal/jsonutils"
 	jwtutils "acs/pkg/auth/jwt"
@@ -73,6 +74,7 @@ func main() {
 
 	var s Server
 	router := s.setUpServerAndRouter(dbPath, jwtPrivateKey, jwtPublicKey, privteKey, publicKey)
+	s.db.AutoMigrate(&db.User{})
 	fmt.Printf("Server started listening on port %d\n", port)
 	strPort := fmt.Sprintf(":%d", port)
 	err := router.RunTLS(strPort, s.PublicKey, s.PublicCertificate)
