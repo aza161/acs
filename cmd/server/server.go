@@ -97,6 +97,18 @@ func (s *Server) registerAccount(c *gin.Context) {
 		return
 	}
 
+	user, err := acsDB.GetUser(s.db, json.UserName)
+	if err != nil {
+		c.IndentedJSON(500, gin.H{"error": "internal error creating user file"})
+		return
+	}
+
+	if err := makeDataFile(user); err != nil {
+		log.Printf("Failed to create data file: %v", err)
+		c.IndentedJSON(500, gin.H{"error": "failed to initialize user data"})
+		return
+	}
+
 	c.IndentedJSON(201, gin.H{"info": "user created successfully"})
 }
 
@@ -138,6 +150,7 @@ func (s *Server) userLogin(c *gin.Context) {
 func (s *Server) syncData(c *gin.Context) {
 	var json jsonutils.SyncRequest
 	if err := c.BindJSON(&json); err != nil {
+		log.Printf("Client side error: %v", err)
 		c.IndentedJSON(400, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
 	}
@@ -162,7 +175,8 @@ func (s *Server) syncData(c *gin.Context) {
 	}
 
 	if user.UpdatedAt.UTC().Compare(json.UpdateDate.UTC()) == -1 && !json.IsMerged && user.EditedBy == json.UniqueDeviceID {
-		err := overWriteFile(user, json.EncryptedData)
+		str, _ := jsonutils.GenerateJson(json.EncryptedData)
+		err := overWriteFile(user, string(str))
 		if err != nil {
 			log.Printf("Internal server error: %v", err)
 			c.IndentedJSON(500, gin.H{"error": "something went wrong please try again"})
@@ -189,7 +203,8 @@ func (s *Server) syncData(c *gin.Context) {
 	}
 
 	if json.IsMerged {
-		err := overWriteFile(user, json.EncryptedData)
+		str, _ := jsonutils.GenerateJson(json.EncryptedData)
+		err := overWriteFile(user, string(str))
 		if err != nil {
 			log.Printf("Internal server error: %v", err)
 			c.IndentedJSON(500, gin.H{"error": "something went wrong please try again"})
@@ -216,6 +231,33 @@ func overWriteFile(user acsDB.User, json string) error {
 	}
 	if n != len(json) {
 		return errors.New("something went wrong")
+	}
+
+	return nil
+}
+
+func makeDataFile(user acsDB.User) error {
+	// Ensure directory exists
+	if err := os.MkdirAll(".users", 0700); err != nil {
+		return fmt.Errorf("failed to create users directory: %w", err)
+	}
+
+	// Create the file (truncate if it exists)
+	file, err := os.Create(".users/" + user.URI)
+	if err != nil {
+		return fmt.Errorf("failed to create user data file: %w", err)
+	}
+	defer file.Close()
+
+	// Initialize with an empty encrypted vault placeholder
+	emptyVault := jsonutils.EncryptedPasswords{}
+	data, err := jsonutils.GenerateJson(emptyVault)
+	if err != nil {
+		return fmt.Errorf("failed to marshal empty vault: %w", err)
+	}
+
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("failed to write user data file: %w", err)
 	}
 
 	return nil
