@@ -46,11 +46,11 @@ type LoginRequest struct {
 }
 
 type SyncRequest struct {
-	JWT            string    `json:"token" binding:"required"`
-	UniqueDeviceID uuid.UUID `json:"uuid" binding:"required"`
-	UpdateDate     time.Time `json:"update_date" binding:"required"`
-	IsMerged       bool      `json:"is_merged" binding:"required"`
-	EncryptedData  string    `json:"vault" binding:"required"`
+	JWT            string             `json:"token" binding:"required"`
+	UniqueDeviceID uuid.UUID          `json:"uuid" binding:"required"`
+	UpdateDate     time.Time          `json:"update_date" binding:"required"`
+	IsMerged       bool               `json:"is_merged" binding:"required"`
+	EncryptedData  EncryptedPasswords `json:"vault" binding:"required"`
 }
 
 // A function that generates indented JSON stings
