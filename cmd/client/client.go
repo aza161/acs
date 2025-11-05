@@ -2,10 +2,12 @@ package main
 
 import (
 	"acs/internal/jsonutils"
+	encrypt "acs/pkg/crypt"
 	"acs/pkg/passutils"
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -716,7 +718,7 @@ func logIn(client *http.Client, url, userName, password string) (string, error) 
 		return "", fmt.Errorf("Failed to read response body: %v", err)
 	}
 
-	var responseMap map[string]interface{}
+	var responseMap map[string]any
 	err = json.Unmarshal(body, &responseMap)
 	if err != nil {
 		return "", fmt.Errorf("Failed to unmarshal response JSON: %v", err)
@@ -734,16 +736,16 @@ func sync(client *http.Client, vaultPath, url, jwt, masterPass string, isMerged 
 		return fmt.Errorf("too many retries, giving up")
 	}
 	urlAPI := fmt.Sprintf("%s/sync", url)
-	byteEnv, _ := jsonutils.GenerateJson(env)
-	strEnv := string(byteEnv)
+	//byteEnv, _ := jsonutils.GenerateJson(env)
+	//strEnv := string(byteEnv)
 	jsonRequest, err := jsonutils.GenerateJson(jsonutils.SyncRequest{JWT: jwt,
 		UniqueDeviceID: uuid,
 		UpdateDate:     env.UpdateDate.UTC(),
 		IsMerged:       isMerged,
-		EncryptedData:  strEnv,
+		EncryptedData:  env,
 	})
 
-	request, err := http.NewRequest("POST", urlAPI, bytes.NewBuffer(jsonRequest))
+	request, err := http.NewRequest("POST", urlAPI, bytes.NewBuffer([]byte(string(jsonRequest))))
 	if err != nil {
 		return err
 	}
@@ -754,18 +756,25 @@ func sync(client *http.Client, vaultPath, url, jwt, masterPass string, isMerged 
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusConflict {
-		var remoteEntries []jsonutils.Entry
+		var env jsonutils.EncryptedPasswords
 		decoder := json.NewDecoder(response.Body)
-		if err := decoder.Decode(&remoteEntries); err != nil {
-			return fmt.Errorf("failed to decode remote entries from conflict response: %w", err)
+		if err := decoder.Decode(&env); err != nil {
+			return fmt.Errorf("failed to decode remote env from conflict response: %w", err)
 		}
+		nonce, _ := base64.StdEncoding.DecodeString(env.Nonce)
+		salt, _ := base64.StdEncoding.DecodeString(env.Salt)
+		key, _ := passutils.Argon2ID(masterPass, salt, env.Threads)
+		ciphertext, _ := base64.StdEncoding.DecodeString(env.EncryptedData)
+		remoteEntriesBytes, _ := encrypt.DecryptAESGCM(key, nonce, ciphertext, []byte("Encrypted_Passwords"))
+		var remoteEntries []jsonutils.Entry
+		json.Unmarshal(remoteEntriesBytes, &remoteEntries)
 		*entries = merge(*entries, remoteEntries)
 		if err := writeEncryptedVault(vaultPath, masterPass, *entries); err != nil {
 			return fmt.Errorf("failed to encrypt merged remote entries: %w", err)
 		}
 		return sync(client, vaultPath, url, jwt, masterPass, true, env, uuid, entries, maxRetries-1)
 	}
-	if response.StatusCode != http.StatusOK {
+	if response.StatusCode != http.StatusCreated {
 		return fmt.Errorf("unexpected response status: %d", response.StatusCode)
 	}
 
